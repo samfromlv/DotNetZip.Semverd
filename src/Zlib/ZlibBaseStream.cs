@@ -58,6 +58,9 @@ namespace Ionic.Zlib
 
         internal int Crc32 { get { if (crc == null) return 0; return crc.Crc32Result; } }
 
+        protected internal byte[] sharedDictionary;
+        protected internal int sharedDictionaryAdler32;
+
         public ZlibBaseStream(System.IO.Stream stream,
                               CompressionMode compressionMode,
                               CompressionLevel level,
@@ -77,6 +80,20 @@ namespace Ionic.Zlib
             {
                 this.crc = new Ionic.Crc.CRC32();
             }
+        }
+
+        public ZlibBaseStream(System.IO.Stream stream,
+                             CompressionMode compressionMode,
+                             CompressionLevel level,
+                             ZlibStreamFlavor flavor,
+                             bool leaveOpen,
+                             byte[] sharedDictionary)
+           : this(stream, compressionMode, level, flavor, leaveOpen)
+        {
+            if (sharedDictionary != null && flavor != ZlibStreamFlavor.ZLIB)
+                throw new Exception("Shared dictionary only supported for zlib streams");
+
+            this.sharedDictionary = sharedDictionary;
         }
 
 
@@ -99,11 +116,24 @@ namespace Ionic.Zlib
                     if (this._compressionMode == CompressionMode.Decompress)
                     {
                         _z.InitializeInflate(wantRfc1950Header);
+                        if (sharedDictionary != null)
+                        {
+                            sharedDictionaryAdler32 = (int)Adler.Adler32(1, sharedDictionary, 0, sharedDictionary.Length);
+                        }
                     }
                     else
                     {
                         _z.Strategy = Strategy;
                         _z.InitializeDeflate(this._level, wantRfc1950Header);
+                        if (sharedDictionary != null)
+                        {
+                            int rc = _z.SetDictionary(sharedDictionary);
+                            if (rc != ZlibConstants.Z_OK)
+                            {
+                                throw new ZlibException("Error on setting shared dictionary - " + z.Message);
+                            }
+                            sharedDictionaryAdler32 = _z.Adler32;
+                        }
                     }
                 }
                 return _z;
@@ -149,9 +179,16 @@ namespace Ionic.Zlib
                 _z.OutputBuffer = workingBuffer;
                 _z.NextOut = 0;
                 _z.AvailableBytesOut = _workingBuffer.Length;
+                 
                 int rc = (_wantCompress)
                     ? _z.Deflate(_flushMode)
                     : _z.Inflate(_flushMode);
+
+                if (rc == ZlibConstants.Z_NEED_DICT && !_wantCompress)
+                {
+                    rc = LoadSharedDictionary();
+                }
+
                 if (rc != ZlibConstants.Z_OK && rc != ZlibConstants.Z_STREAM_END)
                     throw new ZlibException((_wantCompress ? "de" : "in") + "flating: " + _z.Message);
 
@@ -166,6 +203,23 @@ namespace Ionic.Zlib
 
             }
             while (!done);
+        }
+
+        private int LoadSharedDictionary()
+        {
+            if (sharedDictionary == null)
+            {
+                throw new ZlibException("Shared dictionary is required to decompress this stream");
+            }
+            if (_z.Adler32 != sharedDictionaryAdler32)
+            {
+                throw new ZlibException("Shared dictionary checksum verification failed. Please make sure you use same dictionary for compression and decompression.");
+            }
+            int rc = _z.SetDictionary(sharedDictionary);
+            if (rc != ZlibConstants.Z_OK)
+                throw new ZlibException("Error setting shared dictionary: " + _z.Message);
+
+            return rc;
         }
 
 
@@ -185,6 +239,11 @@ namespace Ionic.Zlib
                     int rc = (_wantCompress)
                         ? _z.Deflate(FlushType.Finish)
                         : _z.Inflate(FlushType.Finish);
+
+                    if (rc == ZlibConstants.Z_NEED_DICT && !_wantCompress)
+                    {
+                        rc = LoadSharedDictionary();
+                    }
 
                     if (rc != ZlibConstants.Z_STREAM_END && rc != ZlibConstants.Z_OK)
                     {
@@ -477,6 +536,11 @@ namespace Ionic.Zlib
                 rc = (_wantCompress)
                     ? _z.Deflate(_flushMode)
                     : _z.Inflate(_flushMode);
+
+                if (rc == ZlibConstants.Z_NEED_DICT && !_wantCompress)
+                {
+                    rc = LoadSharedDictionary();
+                }
 
                 if (nomoreinput && (rc == ZlibConstants.Z_BUF_ERROR))
                     return 0;

@@ -132,6 +132,65 @@ namespace Ionic.Zlib
         }
 
         /// <summary>
+        /// Create a <c>ZlibStream</c> using the specified <c>CompressionMode</c>.
+        /// </summary>
+        /// <remarks>
+        ///
+        /// <para>
+        ///   When mode is <c>CompressionMode.Compress</c>, the <c>ZlibStream</c>
+        ///   will use the default compression level. The "captive" stream will be
+        ///   closed when the <c>ZlibStream</c> is closed.
+        /// </para>
+        ///
+        /// </remarks>
+        ///
+        /// <example>
+        /// This example uses a <c>ZlibStream</c> to compress a file, and writes the
+        /// compressed data to another file.
+        /// <code>
+        /// using (System.IO.Stream input = System.IO.File.OpenRead(fileToCompress))
+        /// {
+        ///     using (var raw = System.IO.File.Create(fileToCompress + ".zlib"))
+        ///     {
+        ///         using (Stream compressor = new ZlibStream(raw, CompressionMode.Compress))
+        ///         {
+        ///             byte[] buffer = new byte[WORKING_BUFFER_SIZE];
+        ///             int n;
+        ///             while ((n= input.Read(buffer, 0, buffer.Length)) != 0)
+        ///             {
+        ///                 compressor.Write(buffer, 0, n);
+        ///             }
+        ///         }
+        ///     }
+        /// }
+        /// </code>
+        /// <code lang="VB">
+        /// Using input As Stream = File.OpenRead(fileToCompress)
+        ///     Using raw As FileStream = File.Create(fileToCompress &amp; ".zlib")
+        ///     Using compressor As Stream = New ZlibStream(raw, CompressionMode.Compress)
+        ///         Dim buffer As Byte() = New Byte(4096) {}
+        ///         Dim n As Integer = -1
+        ///         Do While (n &lt;&gt; 0)
+        ///             If (n &gt; 0) Then
+        ///                 compressor.Write(buffer, 0, n)
+        ///             End If
+        ///             n = input.Read(buffer, 0, buffer.Length)
+        ///         Loop
+        ///     End Using
+        ///     End Using
+        /// End Using
+        /// </code>
+        /// </example>
+        ///
+        /// <param name="stream">The stream which will be read or written.</param>
+        /// <param name="mode">Indicates whether the ZlibStream will compress or decompress.</param>
+        /// <param name="sharedDictionary">Shared dictionary used for compression of decompression.</param>
+        public ZlibStream(System.IO.Stream stream, CompressionMode mode, byte[] sharedDictionary)
+         : this(stream, mode, CompressionLevel.Default, false, sharedDictionary)
+        {
+        }
+
+        /// <summary>
         ///   Create a <c>ZlibStream</c> using the specified <c>CompressionMode</c> and
         ///   the specified <c>CompressionLevel</c>.
         /// </summary>
@@ -316,8 +375,97 @@ namespace Ionic.Zlib
         /// effective only when mode is <c>CompressionMode.Compress</c>.
         /// </param>
         public ZlibStream(System.IO.Stream stream, CompressionMode mode, CompressionLevel level, bool leaveOpen)
+            :this(stream, mode, level, leaveOpen, null)
         {
-            _baseStream = new ZlibBaseStream(stream, mode, level, ZlibStreamFlavor.ZLIB, leaveOpen);
+        }
+
+        /// <summary>
+        ///   Create a <c>ZlibStream</c> using the specified <c>CompressionMode</c>
+        ///   and the specified <c>CompressionLevel</c>, and explicitly specify
+        ///   whether the stream should be left open after Deflation or Inflation.
+        /// </summary>
+        ///
+        /// <remarks>
+        ///
+        /// <para>
+        ///   This constructor allows the application to request that the captive
+        ///   stream remain open after the deflation or inflation occurs.  By
+        ///   default, after <c>Close()</c> is called on the stream, the captive
+        ///   stream is also closed. In some cases this is not desired, for example
+        ///   if the stream is a <see cref="System.IO.MemoryStream"/> that will be
+        ///   re-read after compression.  Specify true for the <paramref
+        ///   name="leaveOpen"/> parameter to leave the stream open.
+        /// </para>
+        ///
+        /// <para>
+        ///   When mode is <c>CompressionMode.Decompress</c>, the level parameter is
+        ///   ignored.
+        /// </para>
+        ///
+        /// </remarks>
+        ///
+        /// <example>
+        ///
+        /// This example shows how to use a ZlibStream to compress the data from a file,
+        /// and store the result into another file. The filestream remains open to allow
+        /// additional data to be written to it.
+        ///
+        /// <code>
+        /// using (var output = System.IO.File.Create(fileToCompress + ".zlib"))
+        /// {
+        ///     using (System.IO.Stream input = System.IO.File.OpenRead(fileToCompress))
+        ///     {
+        ///         using (Stream compressor = new ZlibStream(output, CompressionMode.Compress, CompressionLevel.BestCompression, true))
+        ///         {
+        ///             byte[] buffer = new byte[WORKING_BUFFER_SIZE];
+        ///             int n;
+        ///             while ((n= input.Read(buffer, 0, buffer.Length)) != 0)
+        ///             {
+        ///                 compressor.Write(buffer, 0, n);
+        ///             }
+        ///         }
+        ///     }
+        ///     // can write additional data to the output stream here
+        /// }
+        /// </code>
+        /// <code lang="VB">
+        /// Using output As FileStream = File.Create(fileToCompress &amp; ".zlib")
+        ///     Using input As Stream = File.OpenRead(fileToCompress)
+        ///         Using compressor As Stream = New ZlibStream(output, CompressionMode.Compress, CompressionLevel.BestCompression, True)
+        ///             Dim buffer As Byte() = New Byte(4096) {}
+        ///             Dim n As Integer = -1
+        ///             Do While (n &lt;&gt; 0)
+        ///                 If (n &gt; 0) Then
+        ///                     compressor.Write(buffer, 0, n)
+        ///                 End If
+        ///                 n = input.Read(buffer, 0, buffer.Length)
+        ///             Loop
+        ///         End Using
+        ///     End Using
+        ///     ' can write additional data to the output stream here.
+        /// End Using
+        /// </code>
+        /// </example>
+        ///
+        /// <param name="stream">The stream which will be read or written.</param>
+        ///
+        /// <param name="mode">Indicates whether the ZlibStream will compress or decompress.</param>
+        ///
+        /// <param name="leaveOpen">
+        /// true if the application would like the stream to remain open after
+        /// inflation/deflation.
+        /// </param>
+        ///
+        /// <param name="level">
+        /// A tuning knob to trade speed for effectiveness. This parameter is
+        /// effective only when mode is <c>CompressionMode.Compress</c>.
+        /// </param>
+        /// <param name="sharedDictionary">
+        /// Shared dictionary to use for compression or decompression
+        /// </param>
+        public ZlibStream(System.IO.Stream stream, CompressionMode mode, CompressionLevel level, bool leaveOpen, byte[] sharedDictionary)
+        {
+            _baseStream = new ZlibBaseStream(stream, mode, level, ZlibStreamFlavor.ZLIB, leaveOpen, sharedDictionary);
         }
 
         #region Zlib properties
