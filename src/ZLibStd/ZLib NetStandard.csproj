@@ -1,0 +1,10 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>Ionic.Zlib</AssemblyName>
+  </PropertyGroup>
+
+  <Import Project="..\Zlib.Shared\Zlib.Shared.projitems" Label="Shared" />
+
+</Project>
